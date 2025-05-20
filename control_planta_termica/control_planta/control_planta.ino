@@ -22,12 +22,12 @@ float tempF = 0.0;
 
 // Control System Variables
 float Ref = 32.0; // System Reference - Temperature [°C]
-float escalones[] = {5, 10, -10, -5, 15, -12, 3, 8};
+float escalones[] = {5, -12, 10, -5, 15};
 int numEscalones = sizeof(escalones) / sizeof(escalones[0]);
 int escalonActual = 0;
 unsigned long tiempoInicioEscalon = 0;
-unsigned long duracionEscalon = 26000000/8;         // Duración de cada escalón [ms]
-unsigned long tiempoAsentamientoInicial = 240000; // Tiempo de asentamiento [ms]
+unsigned long duracionEscalon = 900000;   // 15 min Duración de cada escalón [ms]
+unsigned long tiempoAsentamientoInicial = 600000; // 10 min Tiempo de asentamiento [ms]
 unsigned long tiempoInicial = 0;
 
 float U_op = 30.0;      // Direct Control Output - FOR OPENLOOP or FEEDFORWARD [mA]
@@ -118,7 +118,9 @@ void calibracion() {
     analogWriteADJ(OutputPWM_GPIO, pwmDuty);
 
     // Salida serial
-    Serial.print("U:");
+    Serial.print("T:");
+    Serial.print((currentMillis - tiempoInicial)/1000);
+    Serial.print(",U:");
     Serial.print(U_t);
     Serial.print(",tempF:");
     Serial.println(tempF);
