@@ -1,72 +1,39 @@
 %% Datos iniciales
 clc; clear;
 m = 0.01165; % kg
-m_adicional = 0.02; % kg
+m_adicional = 0.028 - m; % kg
 l = 0.145; % m
 g = 9.81; % m/s^2
-I = 1/12*m*l^3;
-I = I * 1220;
+I = (1/3*m + m_adicional)*l^2; % usando ejes paralelos + masa puntual
+I = I * 85;
+inercia = I;
 punto_operacion = 80; % grados
+k = (m*g*l/(2*I) + m_adicional * g * l / I);
 
-%% 
-k = m*g*l*cosd(punto_operacion) + 2*m_adicional*g*l*cosd(punto_operacion);
-K_pwm_rad = 0.0382; % pendiente de la curva ángulo (radianes) vs pwm (%)
+%% Experimento de PWM vs Fuerza del motor
+K_pwm_F = 0.0002; % pendiente de la curva fuerza del motor vs pwm (%) (para el caso del brazo con masa adicional)
 
-K_rad_grados = 180 / pi;
-
+%% Experimento fricción (dejar caer el brazo)
 alpha_experimental = 2.51e-2; % obtenido de los promedios del experimento de dejar caer el brazo
 B = 2*I*alpha_experimental; % hallado sabiendo que alpha = termino_de_s / 2
 
+%% Conversiones
+K_rad_grados = 180 / pi;
 
-%% 1) Carga los datos experimentales desde Excel
-% Suponiendo que tu archivo se llama "ExperimentoFriccionP2.xlsx" y la
-% hoja con los datos se llama "DEF"
+%% 1) Carga los datos experimentales desde Excel de los experimentos
+% Experimento fricción
 M = readmatrix('datos_caida_brazo_exp_1.xlsx','Sheet','Hoja1');
 t_exp     = M(:,1);      % columna de tiempos (s)
 theta_exp = M(:,2);      % columna de ángulos (grados)
 angulo_inicial = theta_exp(1) * pi / 180; % angulo inicial de la prueba, en radianes 
 
-
-M = readmatrix('diagrama_pwm_vs_angulo.xlsx','Sheet','Hoja2');
-F_exp     = M(:,1);      % columna de tiempos (s)
-theta_exp_fuerza = M(:,2);      % columna de ángulos (radianes)
-
-pwm_data    = linspace(0, 1000, length(t_exp))';
-pwm_entrada = timeseries(pwm_data, t_exp);
-
-%% 2) Lanza la simulación de tu modelo Simulink
-% Asegúrate de que en tu modelo tengas un bloque To Workspace que
-% vierta la señal angular en 'out.simout' (timeseries).
-simOut  = sim('planta','ReturnWorkspaceOutputs','on');  % sustituye 'planta' por el nombre de tu .slx si es otro
+%% 2) Lanza la simulación de Simulink
+simOut  = sim('planta','ReturnWorkspaceOutputs','on');
 
 %% 3) Extrae la señal simulada de la variable 'out'
 ts  = simOut.get('simout');% timeseries
 t_sim    = ts.time;        % tiempo de simulación
 theta_sim = ts.data;       % ángulo simulado (grados)
-
-% ts_fuerza = simOut.get('datos_fuerza_angulo__fuerza');
-% ts_angulo = simOut.get('datos_fuerza_angulo__angulo');
-% fuerza    = ts_fuerza.data;
-% angulo    = ts_angulo.data;
-
-%% 4) Barrido de PWM y extracción del ángulo en estado estacionario
-pwm_vals      = F_exp;                       % tus valores experimentales de PWM
-theta_sim_f   = zeros(size(pwm_vals));       % prealoca
-
-for i = 1:numel(pwm_vals)
-    % Prepara la entrada escalar
-    simIn = Simulink.SimulationInput('planta');
-    simIn = simIn.setVariable('pwm_entrada', pwm_vals(i));
-    
-    % Corre la simulación
-    simOut_i = sim(simIn,'ReturnWorkspaceOutputs','on');
-    
-    % Extrae la serie de ángulo para esta simulación
-    ts_ang_i = simOut_i.get('datos_fuerza_angulo__angulo');
-    
-    % Toma el último valor (estado estable)
-    theta_sim_f(i) = ts_ang_i.data(end);
-end
 
 %% 4) Grafica ambas curvas superpuestas
 figure; hold on;
@@ -78,13 +45,23 @@ title ('Comparación: Datos Excel vs. Salida Simulink');
 legend('Location','best');
 grid on;
 
-%% 5) Grafica la comparación PWM vs. ángulo
-figure; hold on;
-h1 = plot(F_exp,           theta_exp_fuerza, 'ro', 'MarkerSize',6);
-h2 = plot(pwm_vals,        theta_sim_f,       'b-', 'LineWidth',1.5);
+%% 6) Comparación Simulink vs Real desde 'diagrama_pwm_vs_fuerza.xlsx'
+% Lee la hoja "Simulink"
+M_sim   = readmatrix('diagrama_pwm_vs_fuerza.xlsx', 'Sheet','Simulink');
+PWM_sim = M_sim(:,1);   % Columna A: PWM
+F_sim   = M_sim(:,2);   % Columna B: F_motor
 
-xlabel('Voltage (PWM)');
-ylabel('Ángulo \theta (°)');
-title ('Comparación: Datos Excel vs. Modelo Simulink (barrido de PWM)');
-legend([h1 h2], {'Datos Exp Fuerza','Simulink Fuerza'}, 'Location','best');
+% Lee la hoja "Real"
+M_real   = readmatrix('diagrama_pwm_vs_fuerza.xlsx', 'Sheet','Real');
+PWM_real = M_real(:,1);
+F_real   = M_real(:,2);
+
+% Grafica comparación
+figure; hold on;
+plot(PWM_sim, F_sim,   'b-o', 'LineWidth',1.5, 'DisplayName','Simulink');
+plot(PWM_real, F_real, 'r-s', 'LineWidth',1.5, 'DisplayName','Real');
+xlabel('PWM (counts)');
+ylabel('F\_motor (N)');
+title('Comparación Fuerza Motor: Simulink vs Real');
+legend('Location','best');
 grid on;
